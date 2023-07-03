@@ -96,7 +96,6 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             await asyncio.sleep(0.05)
 
     except Exception as e:
-        raise e
         logger.info(f"Client {client_name} disconnected: {e}")
         writer.close()
         await writer.wait_closed()
