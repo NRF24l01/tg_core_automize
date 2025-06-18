@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package bot;
 
-message ChatMessage {
+message Action {
     string type = 1;
     string payload = 2;
 }
 
-service ChatService {
-    rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+service ActionService {
+    rpc Chat(stream Action) returns (stream Action);
 }
