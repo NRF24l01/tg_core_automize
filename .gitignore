@@ -1,1 +1,4 @@
 *pb2*
+*.env
+*.pyc
+*session*
