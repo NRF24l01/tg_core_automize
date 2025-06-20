@@ -1,6 +1,7 @@
 from socket import socket
 from json import loads, dumps
 from struct import pack, unpack
+from select import select
 
 
 class SocketController:
@@ -12,6 +13,10 @@ class SocketController:
         self.socket.send(raw)
     
     def read_raw(self) -> bytes:
+        ready_to_read, _, _ = select([self.socket], [], [], 0)
+        if not ready_to_read:
+            return None
+        
         len_unprocessed = b""
         while len(len_unprocessed) != 4:
             len_unprocessed += self.socket.recv(4-len(len_unprocessed))
@@ -25,4 +30,8 @@ class SocketController:
         self.send_raw(dumps(payload).encode("UTF-8"))
     
     def read_json(self) -> dict | list:
+        ready_to_read, _, _ = select([self.socket], [], [], 0)
+        if not ready_to_read:
+            return None
+        
         return loads(self.read_raw().decode("UTF-8"))
