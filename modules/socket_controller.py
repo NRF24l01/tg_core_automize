@@ -12,7 +12,7 @@ class SocketController:
         self.socket.send(pack("<I", len(raw)))
         self.socket.send(raw)
     
-    def read_raw(self) -> bytes:
+    def read_raw(self) -> bytes | None:
         ready_to_read, _, _ = select([self.socket], [], [], 0)
         if not ready_to_read:
             return None
@@ -29,7 +29,13 @@ class SocketController:
     def send_json(self, payload: dict | list):
         self.send_raw(dumps(payload).encode("UTF-8"))
     
-    def read_json(self) -> dict | list:
+    def data_avalible(self) -> bool:
+        ready_to_read, _, _ = select([self.socket], [], [], 0)
+        if not ready_to_read:
+            return False
+        return True
+    
+    def read_json(self) -> dict | list | None:
         ready_to_read, _, _ = select([self.socket], [], [], 0)
         if not ready_to_read:
             return None
