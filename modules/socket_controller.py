@@ -11,9 +11,6 @@ class SocketController:
         self.socket.send(pack("<I", len(raw)))
         self.socket.send(raw)
     
-    def send_json(self, payload: dict | list):
-        self.send_raw(dumps(payload).encode("UTF-8"))
-    
     def read_raw(self) -> bytes:
         len_unprocessed = b""
         while len(len_unprocessed) != 4:
@@ -23,6 +20,9 @@ class SocketController:
         while len(payload) != payload_len:
             payload += self.socket.recv(payload_len-len(payload))
         return payload
+    
+    def send_json(self, payload: dict | list):
+        self.send_raw(dumps(payload).encode("UTF-8"))
     
     def read_json(self) -> dict | list:
         return loads(self.read_raw().decode("UTF-8"))
