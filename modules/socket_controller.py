@@ -12,11 +12,7 @@ class SocketController:
         self.socket.send(pack("<I", len(raw)))
         self.socket.send(raw)
     
-    def read_raw(self) -> bytes | None:
-        ready_to_read, _, _ = select([self.socket], [], [], 0)
-        if not ready_to_read:
-            return None
-        
+    def read_raw(self) -> bytes:
         len_unprocessed = b""
         while len(len_unprocessed) != 4:
             len_unprocessed += self.socket.recv(4-len(len_unprocessed))
@@ -35,9 +31,10 @@ class SocketController:
             return False
         return True
     
-    def read_json(self) -> dict | list | None:
-        ready_to_read, _, _ = select([self.socket], [], [], 0)
-        if not ready_to_read:
-            return None
+    def read_json(self, untill_packet: bool = False) -> dict | list | None:
+        if not untill_packet:
+            ready_to_read, _, _ = select([self.socket], [], [], 0)
+            if not ready_to_read:
+                return None
         
         return loads(self.read_raw().decode("UTF-8"))
