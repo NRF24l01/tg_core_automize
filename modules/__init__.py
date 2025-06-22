@@ -1,2 +1,2 @@
-from .socket_controller import SocketController
+from .socket_controller import AsyncSocketController, SocketController
 from .logger import Logger
