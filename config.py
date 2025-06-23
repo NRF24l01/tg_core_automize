@@ -11,3 +11,14 @@ SESSION_NAME = getenv("SESSION_NAME")
 # Socket server conifg
 HOST = getenv("HOST", "127.0.0.1")
 PORT = int(getenv("PORT", "4375"))
+
+# Db config
+TORTOISE_ORM = {
+    "connections": {"default": "sqlite://db.sqlite3"},
+    "apps": {
+        "models": {
+            "models": ["models", "aerich.models"],
+            "default_connection": "default",
+        }
+    }
+}
