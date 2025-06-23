@@ -3,7 +3,7 @@ from tortoise.models import Model
 
 class Chat(Model):
     id = fields.IntField(pk=True)
-    chat_id = fields.BigIntField()
+    chat_id = fields.BigIntField(unique=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     
     modules: fields.ReverseRelation["ChatModule"]
