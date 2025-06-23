@@ -1,6 +1,7 @@
 import asyncio
 from aerich import Command
 from config import TORTOISE_ORM
+from tortoise import Tortoise
 import os
 
 async def run_migrations():
@@ -18,7 +19,7 @@ async def run_migrations():
         
     await command.migrate()             # Генерирует миграции
     await command.upgrade()             # Применяет миграции
-    exit(0)
+    await Tortoise.close_connections()
 
 if __name__ == "__main__":
     asyncio.run(run_migrations())
