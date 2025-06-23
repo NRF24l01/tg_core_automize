@@ -4,6 +4,9 @@ from telethon import TelegramClient, events
 from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH
 from datetime import datetime
 from modules import Logger, AsyncSocketController
+from command_processer import process_message
+from tortoise import Tortoise, run_async
+from migrate import run_migrations
 
 tasks: dict[str, asyncio.Queue] = {}
 clients = set()
@@ -12,6 +15,12 @@ clients_lock = asyncio.Lock()
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 logger = Logger()
 
+async def init():
+    await Tortoise.init(
+        db_url='sqlite://db.sqlite3',
+        modules={'models': ['models']}
+    )
+    await Tortoise.generate_schemas()
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     logger = Logger()
@@ -78,6 +87,8 @@ async def start_server():
         
 @client.on(events.NewMessage())
 async def handler(event):
+    await process_message(event.raw_text, event.sender_id, client, event.message.out)
+    
     sender = event.sender_id
     message = event.raw_text
     timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
@@ -99,6 +110,9 @@ async def handler(event):
 async def main():
     logger.info("Starting...")
 
+    await run_migrations()
+    await init()
+    
     await client.start()
     logger.info("Telegram client started.")
 
