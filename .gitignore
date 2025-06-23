@@ -2,3 +2,7 @@
 *.env
 *.pyc
 *session*
+*venv*
+*migrations*
+*pycache*
+*db*
