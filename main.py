@@ -56,7 +56,6 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     logger.info(f"Error reading from client {client_name}: {e}")
             
             q = tasks[client_name]
-            print(q)
             pending = []
             while not q.empty():
                 task = await q.get()
@@ -64,7 +63,6 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     await controller.send_json(task)
                 else:
                     pending.append(task)
-            print(pending)
             for task in pending:
                 await q.put(task)
 
@@ -102,9 +100,7 @@ async def handler(event):
                 "message": message,
                 "timestamp": timestamp
             }
-            print(f"Putting task into queue: {task}")
             await q.put(task)
-        print(tasks)
 
 # --- Главный AsyncIO запуск ---
 async def main():

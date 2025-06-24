@@ -6,7 +6,6 @@ async def process_message(event: events.NewMessage, client: TelegramClient):
     chat_id = event.sender_id
     from_my = event.message.out
     
-    print(message, chat_id, from_my)
     if not from_my:
         return
     
