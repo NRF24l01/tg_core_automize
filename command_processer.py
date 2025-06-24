@@ -1,17 +1,22 @@
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from models import Chat
 
-async def process_message(message: str, chat_id: int, client: TelegramClient, from_my: bool = False):
+async def process_message(event: events.NewMessage, client: TelegramClient):
+    message = event.raw_text
+    chat_id = event.sender_id
+    from_my = event.message.out
+    
     print(message, chat_id, from_my)
     if not from_my:
         return
     
     if message.strip().startswith("/init"):
-        return await process_init_message(message=message, chat_id=chat_id, client=client)
+        return await process_init_message(event=event, client=client)
         
 
-async def process_init_message(message: str, chat_id: int, client: TelegramClient):
-    msg = await client.send_message(chat_id, f'Запрос на инициализацию чата({chat_id}) принят.')
+async def process_init_message(event: events.NewMessage, client: TelegramClient):
+    chat_id = event.sender_id
+    msg = await client.send_message(chat_id, f'Запрос на инициализацию чата({chat_id}) принят.', reply_to=event.message)
     user, created = await Chat.get_or_create(
         chat_id=chat_id
     )

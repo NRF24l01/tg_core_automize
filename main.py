@@ -87,7 +87,7 @@ async def start_server():
         
 @client.on(events.NewMessage())
 async def handler(event):
-    await process_message(event.raw_text, event.sender_id, client, event.message.out)
+    await process_message(event=event, client=client)
     
     sender = event.sender_id
     message = event.raw_text
