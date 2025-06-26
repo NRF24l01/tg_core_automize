@@ -35,9 +35,10 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         except Exception:
             await asyncio.sleep(0.1)
 
-    client_name = client_info["name"]
-    client_required_events = client_info["required"]
+    client_name = client_info["key"]
+    client_required_events = [1]
     print(client_info)
+    await controller.send_json({"connected": True, "name": "parrot"})
 
     async with clients_lock:
         clients.add(client_name)
@@ -96,9 +97,11 @@ async def handler(event):
         for q in tasks.values():
             task = {
                 "type": 1,
-                "from": sender,
-                "message": message,
-                "timestamp": timestamp
+                "payload": {
+                    "from": sender,
+                    "message": message,
+                    "timestamp": timestamp
+                }
             }
             await q.put(task)
 
