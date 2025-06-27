@@ -48,6 +48,7 @@ async def generate_key_if_missing(sender, instance: Module, using_db, update_fie
 
 
 class ChatModule(Model):
+    id = fields.UUIDField(pk=True, default=uuid.uuid4)
     chat = fields.ForeignKeyField("models.Chat", related_name="modules", on_delete=fields.CASCADE)
     module = fields.ForeignKeyField("models.Module", related_name="chats", on_delete=fields.CASCADE)
 
