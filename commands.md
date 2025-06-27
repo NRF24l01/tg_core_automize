@@ -23,3 +23,7 @@
 ## modinfo
 *Инфо о модуле*
 `/modinfo <module_name>`
+
+## modreg
+*Зарегестрировать модуль*
+`/modreg <module_name, one word> <description - all other words>`
