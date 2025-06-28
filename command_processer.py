@@ -18,8 +18,10 @@ async def process_message(event: events.NewMessage, client: TelegramClient):
         return await process_config_message(event=event, client=client)
     elif message.strip().startswith("/modprobe"):
         return await process_modprobe_message(event=event, client=client)
-    elif message.strip().startswith("/rmmode"):
+    elif message.strip().startswith("/rmmod"):
         return await process_rmmode_message(event=event, client=client)
+    elif message.strip().startswith("/lsmod"):
+        return await process_lsmod_message(event=event, client=client)
         
 
 async def process_init_message(event: events.NewMessage, client: TelegramClient):
@@ -137,6 +139,7 @@ async def process_modprobe_message(event: events.NewMessage, client: TelegramCli
     
     return
     
+    
 async def process_rmmode_message(event: events.NewMessage, client: TelegramClient):
     chat_id = event.chat_id
     parts = event.raw_text.strip().split()
@@ -165,4 +168,20 @@ async def process_rmmode_message(event: events.NewMessage, client: TelegramClien
         return
     await chatmodule.delete()
     await msg.edit(f"Модуль выгружен.")
+    return
+
+
+async def process_lsmod_message(event: events.NewMessage, client: TelegramClient):
+    chat_id = event.chat_id
+    
+    msg = await client.send_message(chat_id, f"Обрабатываем запрос", reply_to=event.message)
+    
+    chat = await Chat.filter(chat_id=chat_id).first()
+    if chat is None:
+        await msg.edit(f"Кажется чат id: {chat_id} не зарегестрирован.")
+        return
+    
+    chatmodules = await ChatModule.filter(chat=chat).prefetch_related("module")
+    modules = [cm.module.name for cm in chatmodules]
+    await msg.edit("Подгружено:\n"+"\n".join(modules))
     return
