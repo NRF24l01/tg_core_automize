@@ -9,6 +9,7 @@ from tortoise import Tortoise, run_async
 from migrate import run_migrations
 from models import Module, Chat, ChatModule
 
+to_work_tasks = asyncio.Queue()
 tasks: dict[str, asyncio.Queue] = {}
 clients = set()
 clients_lock = asyncio.Lock()
@@ -22,6 +23,15 @@ async def init():
         modules={'models': ['models']}
     )
     await Tortoise.generate_schemas()
+
+async def process_tasks():
+    while True:
+        while not to_work_tasks.empty():
+            task = await to_work_tasks.get()
+            if task["type"] == 1:
+                await client.send_message(int(task["payload"]["to"]), task["payload"]["message"])
+                logger.info(f"Done task: sending message to {task["payload"]["to"]}")
+        await asyncio.sleep(0.1)
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     logger = Logger()
@@ -60,7 +70,8 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             if await controller.data_available():
                 try:
                     data = await controller.read_json()
-                    print("Received:", data)
+                    logger.debug("Received:", data)
+                    await to_work_tasks.put(data)
                 except Exception as e:
                     logger.info(f"Error reading from client {client_name}: {e}")
             
@@ -125,7 +136,8 @@ async def main():
 
     await asyncio.gather(
         start_server(),
-        client.run_until_disconnected()
+        client.run_until_disconnected(),
+        process_tasks()
     )
 
 if __name__ == "__main__":
