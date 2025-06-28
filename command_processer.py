@@ -129,7 +129,7 @@ async def process_modprobe_message(event: events.NewMessage, client: TelegramCli
     
     chatmodule, created = await ChatModule.get_or_create(module=target, chat=chat)
     if created:
-        await msg.edit(f"Подключил!")
+        await msg.edit(f"Модуль успешно загружен в ядро!")
     else:
         await msg.edit(f"Модуль уже был подключен.")
     

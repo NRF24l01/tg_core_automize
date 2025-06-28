@@ -7,7 +7,7 @@ from modules import Logger, AsyncSocketController
 from command_processer import process_message
 from tortoise import Tortoise, run_async
 from migrate import run_migrations
-from models import Module
+from models import Module, Chat, ChatModule
 
 tasks: dict[str, asyncio.Queue] = {}
 clients = set()
@@ -67,8 +67,13 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
-                if task["type"] in client_required_events:
-                    await controller.send_json(task)
+                chat = await Chat.filter(chat_id=int(task["payload"]["from"])).first()
+                if chat:
+                    chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
+                    if chatmodule:
+                        if task["type"] in client_required_events:
+                            task["config"] = chatmodule.config_json
+                            await controller.send_json(task)
 
             await asyncio.sleep(0.05)
 
