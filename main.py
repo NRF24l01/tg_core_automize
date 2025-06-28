@@ -91,7 +91,7 @@ async def start_server():
 async def handler(event):
     await process_message(event=event, client=client)
     
-    sender = event.sender_id
+    sender = event.chat_id
     message = event.raw_text
     timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
 
