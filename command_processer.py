@@ -18,6 +18,8 @@ async def process_message(event: events.NewMessage, client: TelegramClient):
         return await process_config_message(event=event, client=client)
     elif message.strip().startswith("/modprobe"):
         return await process_modprobe_message(event=event, client=client)
+    elif message.strip().startswith("/rmmode"):
+        return await process_rmmode_message(event=event, client=client)
         
 
 async def process_init_message(event: events.NewMessage, client: TelegramClient):
@@ -135,3 +137,32 @@ async def process_modprobe_message(event: events.NewMessage, client: TelegramCli
     
     return
     
+async def process_rmmode_message(event: events.NewMessage, client: TelegramClient):
+    chat_id = event.chat_id
+    parts = event.raw_text.strip().split()
+    
+    if len(parts) != 2:
+        await client.send_message(chat_id, f"Проверьте формат сообщения, требуется больше ровно 2 части({len(parts)}!=2)", reply_to=event.message)
+        return
+    
+    target_name = parts[1]
+    
+    msg = await client.send_message(chat_id, f"Обрабатываем запрос", reply_to=event.message)
+    
+    target = await Module.filter(name=target_name).first()
+    if target is None:
+        await msg.edit(f"Модуль с именем {target_name} не найден.")
+        return
+    
+    chat = await Chat.filter(chat_id=chat_id).first()
+    if chat is None:
+        await msg.edit(f"Кажется чат с id: {chat_id} не зарегестрирован.\n забайтили, я уже проверил наличие модуля")
+        return
+    
+    chatmodule = await ChatModule.filter(chat=chat, module=target).first()
+    if not chatmodule:
+        await msg.edit(f"Такой модуль не загружен в ядро чата.")
+        return
+    await chatmodule.delete()
+    await msg.edit(f"Модуль выгружен.")
+    return
