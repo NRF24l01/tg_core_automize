@@ -185,3 +185,5 @@ async def process_lsmod_message(event: events.NewMessage, client: TelegramClient
     modules = [cm.module.name for cm in chatmodules]
     await msg.edit("Подгружено:\n"+"\n".join(modules))
     return
+
+
