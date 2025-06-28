@@ -7,7 +7,7 @@ from tortoise.exceptions import IntegrityError
 
 import random
 import string
-from typing import Optional
+from typing import Optional, List
 
 
 def generate_random_key(length=40) -> str:
@@ -33,6 +33,18 @@ class Module(Model):
     
     key = fields.CharField(max_length=40, unique=True, null=True)
 
+    required_msgs = fields.JSONField(default=[])  # Store list of ints here
+
+    def get_required_msgs(self) -> List[int]:
+        # Ensure the list contains only ints
+        return [int(x) for x in self.required_msgs]
+
+    def set_required_msgs(self, new_list: List[int]) -> None:
+        # Validate input and set
+        if not all(isinstance(x, int) for x in new_list):
+            raise ValueError("All items must be integers")
+        self.required_msgs = new_list
+    
     chats: fields.ReverseRelation["ChatModule"]
 
 @pre_save(Module)

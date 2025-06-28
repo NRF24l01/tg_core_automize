@@ -7,6 +7,7 @@ from modules import Logger, AsyncSocketController
 from command_processer import process_message
 from tortoise import Tortoise, run_async
 from migrate import run_migrations
+from models import Module
 
 tasks: dict[str, asyncio.Queue] = {}
 clients = set()
@@ -35,15 +36,22 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         except Exception:
             await asyncio.sleep(0.1)
 
-    client_name = client_info["key"]
-    client_required_events = [1]
-    print(client_info)
-    await controller.send_json({"connected": True, "name": "parrot"})
+    client_key = client_info["key"]
+    
+    db_module = await Module.filter(key=client_key).first()
+    if not db_module:
+        await controller.send_json({"connected": False, "error": "No such module"})
+        return
+    
+    client_name = db_module.name
+    client_required_events = db_module.required_msgs
+    
+    await controller.send_json({"connected": True, "name": client_name})
 
     async with clients_lock:
-        clients.add(client_name)
-        if client_name not in tasks:
-            tasks[client_name] = asyncio.Queue()
+        clients.add(client_key)
+        if client_key not in tasks:
+            tasks[client_key] = asyncio.Queue()
 
     logger.info(f"Client '{client_name}' requested events with id: {', '.join(map(str, client_required_events))}")
 
@@ -56,16 +64,11 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 except Exception as e:
                     logger.info(f"Error reading from client {client_name}: {e}")
             
-            q = tasks[client_name]
-            pending = []
+            q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
                 if task["type"] in client_required_events:
                     await controller.send_json(task)
-                else:
-                    pending.append(task)
-            for task in pending:
-                await q.put(task)
 
             await asyncio.sleep(0.05)
 
