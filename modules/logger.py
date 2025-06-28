@@ -42,6 +42,13 @@ class Logger:
 
     def error(self, *args):
         self.logger.error(" ".join(map(str, args)))
+    
+    def debug(self, *args):
+        self.logger.debug(" ".join(map(str, args)))
+
+    def critical(self, *args):
+        self.logger.critical(" ".join(map(str, args)))
+
 
 # Пример использования
 if __name__ == "__main__":
@@ -49,3 +56,6 @@ if __name__ == "__main__":
     logger.info("Это", "информационное", "сообщение", 123)
     logger.warning("Это", "предупреждение", {"ключ": "значение"})
     logger.error("Это", "сообщение", "об ошибке", [1, 2, 3])
+    logger.debug("Отладочное", "сообщение", {"debug": True})
+    logger.critical("Критическая", "ошибка!")
+
