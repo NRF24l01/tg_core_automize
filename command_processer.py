@@ -1,6 +1,6 @@
 from telethon import TelegramClient, events
 from models import Chat, Module, ChatModule
-from json import loads, decoder
+from json import loads, decoder, dumps
 
 
 def set_nested(d: dict, keys: list[str], value):
@@ -32,6 +32,8 @@ async def process_message(event: events.NewMessage, client: TelegramClient):
         return await process_lsmod_message(event=event, client=client)
     elif message.strip().startswith("/modinfo"):
         return await process_modinfo_message(event=event, client=client)
+    elif message.strip().startswith("/modcfg"):
+        return await process_modcfg_message(event=event, client=client)
 
 
 async def process_init_message(event: events.NewMessage, client: TelegramClient):
@@ -285,4 +287,39 @@ async def process_modinfo_message(event: events.NewMessage, client: TelegramClie
         f"Модуль с именем {target_name} найден.\n``` {target.description}```"
     )
     return
+
+
+async def process_modcfg_message(event: events.NewMessage, client: TelegramClient):
+    chat_id = event.chat_id
+    parts = event.raw_text.strip().split()
+
+    if len(parts) <3:
+        await client.send_message(
+            chat_id,
+            f"Проверьте формат сообщения, требуется >3 части({len(parts)}<3)",
+            reply_to=event.message,
+        )
+        return
+
+    target_name = parts[1]
+
+    msg = await client.send_message(
+        chat_id, f"Обрабатываем запрос", reply_to=event.message
+    )
+
+    target = await Module.filter(name=target_name).first()
+    if target is None:
+        await msg.edit(f"Модуль с именем {target_name} не найден.")
+        return
+    
+    config = " ".join(parts[2:])
+    try:
+        config = loads(config)
+    except decoder.JSONDecodeError as e:
+        await msg.edit(f"Проверь блин коректность жсонки, тут кажется чёт не так.\n``` {e}```")
+        return
+    
+    target.default_config_json = config
+    await target.save()
+    await msg.edit(f"Новое значение стандартного конфига сохранено.\n``` {dumps(config)}```")
 
