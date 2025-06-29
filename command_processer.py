@@ -192,7 +192,7 @@ async def process_modprobe_message(event: events.NewMessage, client: TelegramCli
         )
         return
 
-    chatmodule, created = await ChatModule.get_or_create(module=target, chat=chat)
+    chatmodule, created = await ChatModule.get_or_create(module=target, chat=chat, config_json=target.default_config_json)
     if created:
         await msg.edit(f"Модуль успешно загружен в ядро!")
     else:
@@ -285,3 +285,4 @@ async def process_modinfo_message(event: events.NewMessage, client: TelegramClie
         f"Модуль с именем {target_name} найден.\n``` {target.description}```"
     )
     return
+

@@ -34,6 +34,7 @@ class Module(Model):
     key = fields.CharField(max_length=40, unique=True, null=True)
 
     required_msgs = fields.JSONField(default=[])  # Store list of ints here
+    default_config_json = fields.JSONField(default={})
 
     def get_required_msgs(self) -> List[int]:
         # Ensure the list contains only ints
