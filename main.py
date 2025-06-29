@@ -119,7 +119,8 @@ async def handler(event):
                 "payload": {
                     "from": sender,
                     "message": message,
-                    "timestamp": timestamp
+                    "timestamp": timestamp,
+                    "my_message": event.message.out
                 }
             }
             await q.put(task)
