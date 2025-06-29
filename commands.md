@@ -27,3 +27,7 @@
 ## modreg
 *Зарегестрировать модуль*
 `/modreg <module_name, one word> <description - all other words>`
+
+## modcfg
+*УСтановить дефолтный конфиг для модуля*
+`/modcfg <modulename> <JSON config>`
