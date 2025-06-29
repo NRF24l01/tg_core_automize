@@ -89,20 +89,20 @@ async def process_modreg_message(event: events.NewMessage, client: TelegramClien
 
 async def process_config_message(event: events.NewMessage, client: TelegramClient):
     chat_id = event.chat_id
-    parts = event.raw_text.strip().split(maxsplit=1)
+    parts = event.raw_text.strip().split()
 
-    if len(parts) != 2:
+    if len(parts) <3:
         await client.send_message(
             chat_id,
-            f"Неверный формат: требуется команда и JSON payload",
+            f"Неверный формат: требуется not <3",
             reply_to=event.message,
         )
         return
+    
+    config_path = parts[1].strip().split(".")
+    payload = parts[2]
 
-    config_path = parts[0].strip("/").split(".")
-    payload = parts[1]
-
-    if len(config_path) < 3:
+    if len(config_path) <2:
         await client.send_message(
             chat_id,
             f"Неверный формат команды, ожидается минимум 3 части после /config",
@@ -110,7 +110,7 @@ async def process_config_message(event: events.NewMessage, client: TelegramClien
         )
         return
 
-    _, module_name, *path_parts = config_path
+    module_name, *path_parts = config_path
     msg = await client.send_message(
         chat_id, f"Обрабатываем запрос...", reply_to=event.message
     )
@@ -118,6 +118,13 @@ async def process_config_message(event: events.NewMessage, client: TelegramClien
     db_module = await Module.filter(name=module_name).first()
     if db_module is None:
         await msg.edit(f"Модуль `{module_name}` не найден.")
+        return
+    
+    chat = await Chat.filter(chat_id=chat_id).first()
+    if chat is None:
+        await msg.edit(
+            f"Кажется чат с id: {chat_id} не зарегестрирован.\n забайтили, я уже проверил наличие модуля"
+        )
         return
 
     if path_parts[0] == "system":
@@ -145,7 +152,7 @@ async def process_config_message(event: events.NewMessage, client: TelegramClien
             await msg.edit(f"Неизвестный системный ключ: `{key}`")
             return
 
-    db_chatmodule = await ChatModule.filter(chat_id=chat_id, module=db_module).first()
+    db_chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
     if db_chatmodule is None:
         await msg.edit("Модуль не подключён к текущему чату.")
         return

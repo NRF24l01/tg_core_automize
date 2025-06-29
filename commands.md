@@ -14,7 +14,7 @@
 
 ## config
 *Настройка модулей ядра*
-`/config.<module_name>.field(n) <value>`
+`/config <module_name>.field(n) <value>`
 
 ## lsmod
 *Просмотр подгруженых модулей*
