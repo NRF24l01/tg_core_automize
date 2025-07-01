@@ -3,7 +3,7 @@ import json
 from telethon import TelegramClient, events
 from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH
 from datetime import datetime
-from modules import Logger, AsyncSocketController, serialize_sender
+from modules import Logger, AsyncSocketController, serialize_sender, extract_chat_id
 from command_processer import process_message
 from tortoise import Tortoise, run_async
 from migrate import run_migrations
@@ -78,7 +78,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
-                chat = await Chat.filter(chat_id=int(task["payload"]["from"])).first()
+                chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
                 if chat:
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
@@ -90,6 +90,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             await asyncio.sleep(0.05)
 
     except Exception as e:
+        raise e
         logger.info(f"Client {client_name} disconnected: {e}")
         writer.close()
         await writer.wait_closed()
@@ -108,7 +109,7 @@ async def start_server():
 async def handler(event: events.NewMessage.Event):
     await process_message(event=event, client=client)
     
-    sender = event.chat_id
+    sender = extract_chat_id(event)
     message = event.raw_text
     timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
     
@@ -120,7 +121,7 @@ async def handler(event: events.NewMessage.Event):
             task = {
                 "type": 1,
                 "payload": {
-                    "from": sender,
+                    "chat_id": sender,
                     "message": message,
                     "timestamp": timestamp,
                     "my_message": event.message.out,
@@ -138,6 +139,7 @@ async def message_edited(event: events.MessageEdited.Event):
             task = {
                 "type": 2,
                 "payload": {
+                    "chat_id": extract_chat_id(event),
                     "message": event.message.text,
                     "sender": event.sender_id,
                     "msg_id": event.message.id,
