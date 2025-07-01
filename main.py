@@ -120,7 +120,8 @@ async def handler(event):
                     "from": sender,
                     "message": message,
                     "timestamp": timestamp,
-                    "my_message": event.message.out
+                    "my_message": event.message.out,
+                    "msg_id": event.message.id
                 }
             }
             await q.put(task)
