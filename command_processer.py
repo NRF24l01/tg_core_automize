@@ -83,7 +83,8 @@ async def process_modreg_message(event: events.NewMessage, client: TelegramClien
 
     module = await Module.create(name=module_name, description=description)
 
-    await msg.edit(f"Модуль был успешно создан\nid: ``` {module.id}```\nkey: ``` {module.key}```")
+    await msg.edit(
+        f"""Модуль был успешно создан\nid: ``` {module.id}```\nkey: ``` {module.key}```\n\n\nНе забудь про``` /modcfg {module_name} json config```и``` /config {module_name}.system.required_types [1,2,3] ```""")
     return
 
 
