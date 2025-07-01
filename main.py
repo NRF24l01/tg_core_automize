@@ -105,7 +105,7 @@ async def start_server():
         
         
 @client.on(events.NewMessage())
-async def handler(event):
+async def handler(event: events.NewMessage.Event):
     await process_message(event=event, client=client)
     
     sender = event.chat_id
@@ -129,6 +129,36 @@ async def handler(event):
                 }
             }
             await q.put(task)
+
+
+@client.on(events.MessageEdited)
+async def message_edited(event: events.MessageEdited.Event):
+    async with clients_lock:
+        for q in tasks.values():
+            task = {
+                "type": 2,
+                "payload": {
+                    "message": event.message.text,
+                    "sender": event.sender_id,
+                    "msg_id": event.message.id,
+                }
+            }
+            await q.put(task)
+
+
+@client.on(events.MessageDeleted)
+async def message_deleted(event: events.MessageDeleted.Event):
+    async with clients_lock:
+        for msg_id in event.deleted_ids:
+            for q in tasks.values():
+                task = {
+                    "type": 3,
+                    "payload": {
+                        "msg_id": msg_id,
+                    }
+                }
+                await q.put(task)
+
 
 # --- Главный AsyncIO запуск ---
 async def main():
