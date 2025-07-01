@@ -3,7 +3,7 @@ import json
 from telethon import TelegramClient, events
 from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH
 from datetime import datetime
-from modules import Logger, AsyncSocketController
+from modules import Logger, AsyncSocketController, serialize_sender
 from command_processer import process_message
 from tortoise import Tortoise, run_async
 from migrate import run_migrations
@@ -83,6 +83,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
                         if task["type"] in client_required_events:
+                            logger.debug(f"Sending {task} to {client_name}")
                             task["config"] = chatmodule.config_json
                             await controller.send_json(task)
 
@@ -110,6 +111,8 @@ async def handler(event):
     sender = event.chat_id
     message = event.raw_text
     timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
+    
+    sender_obj = await event.get_sender()
 
     # Рассылаем задачу всем клиентам
     async with clients_lock:
@@ -121,7 +124,8 @@ async def handler(event):
                     "message": message,
                     "timestamp": timestamp,
                     "my_message": event.message.out,
-                    "msg_id": event.message.id
+                    "msg_id": event.message.id,
+                    "sender": serialize_sender(sender_obj)
                 }
             }
             await q.put(task)
