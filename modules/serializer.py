@@ -15,6 +15,7 @@ def serialize_sender(sender: Union[User, Chat, Channel]) -> Dict[str, Any]:
             "bot": sender.bot,
             "verified": sender.verified,
             "mutual_contact": sender.mutual_contact,
+            "name": sender.first_name,
         }
 
     elif isinstance(sender, Chat):
@@ -24,6 +25,7 @@ def serialize_sender(sender: Union[User, Chat, Channel]) -> Dict[str, Any]:
             "title": sender.title,
             "username": getattr(sender, "username", None),
             "participants_count": getattr(sender, "participants_count", None),
+            "name": sender.title,
         }
 
     elif isinstance(sender, Channel):
@@ -36,6 +38,7 @@ def serialize_sender(sender: Union[User, Chat, Channel]) -> Dict[str, Any]:
             "megagroup": sender.megagroup,
             "broadcast": sender.broadcast,
             "verified": sender.verified,
+            "name": sender.title,
         }
 
     else:
