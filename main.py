@@ -78,7 +78,10 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
-                chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
+                try:
+                    chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
+                except KeyError as e:
+                    print(task)
                 if chat:
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
