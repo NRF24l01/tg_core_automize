@@ -30,7 +30,7 @@ async def process_tasks():
             task = await to_work_tasks.get()
             if task["type"] == 1:
                 await client.send_message(int(task["payload"]["to"]), task["payload"]["message"])
-                logger.info(f"Done task: sending message to {task["payload"]["to"]}")
+                logger.info(f"Done task: sending message to {task['payload']['to']}")
         await asyncio.sleep(0.1)
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
