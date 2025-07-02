@@ -81,7 +81,10 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 try:
                     chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
                 except KeyError as e:
-                    print(task)
+                    if task["type"] in client_required_events:
+                        logger.debug(f"Sending {task} to {client_name}")
+                        task["config"] = chatmodule.config_json
+                        await controller.send_json(task)
                 if chat:
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
