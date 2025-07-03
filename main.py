@@ -50,7 +50,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     
     db_module = await Module.filter(key=client_key).first()
     if not db_module:
-        await controller.send_json({"connected": False, "error": "No such module"})
+        await controller.send_json({"connected": False, "error": "No module with such key"})
         return
     
     client_name = db_module.name
