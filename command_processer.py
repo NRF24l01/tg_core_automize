@@ -101,7 +101,7 @@ async def process_config_message(event: events.NewMessage, client: TelegramClien
         return
     
     config_path = parts[1].strip().split(".")
-    payload = parts[2]
+    payload = " ".join(parts[2:])
 
     if len(config_path) <2:
         await client.send_message(
@@ -148,7 +148,16 @@ async def process_config_message(event: events.NewMessage, client: TelegramClien
             await db_module.save()
             await msg.edit("Системный конфиг успешно обновлён!")
             return
-
+        elif key == "system":
+            try:
+                system_values = loads(payload)
+            except decoder.JSONDecodeError as e:
+                await msg.edit(f"ЖСОНКУ ХОЧУ {e}")
+                return
+            db_module.system_config = system_values
+            await db_module.save()
+            await msg.edit("Обновил конфиг модуля")
+            return
         else:
             await msg.edit(f"Неизвестный системный ключ: `{key}`")
             return

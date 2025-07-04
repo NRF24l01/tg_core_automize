@@ -111,14 +111,27 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
+                
+                try:
+                    await db_module.refresh_from_db()  # ← Получаем свежие данные из БД
+                except Exception as e:
+                    logger.info(f"Error refreshing db_module for client {client_name}: {e}")
+                    continue
+
+                task["system_config"] = db_module.system_config
+                skip = False
+                if db_module.system_config.get("skip_private", False) is True and task.get("is_private", False):
+                    skip = True 
+                
                 try:
                     chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
                 except KeyError as e:
                     if task["type"] in client_required_events:
                         logger.debug(f"Sending {task} to {client_name}")
-                        task["config"] = chatmodule.config_json
+                        task["config"] = {}
                         try:
                             await asyncio.wait_for(controller.send_json(task), timeout=5.0)
+                            break
                         except asyncio.TimeoutError:
                             logger.info(f"Client {client_name} did not respond to send, disconnecting.")
                             client_disconnected = True
@@ -127,12 +140,15 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             logger.info(f"Error sending to client {client_name}: {e}")
                             client_disconnected = True
                             break
-                if chat:
+                if chat and not skip:
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
+                        task["config"] = chatmodule.config_json
+                    else:
+                        task["config"] = {}
+                    if chatmodule or skip:
                         if task["type"] in client_required_events:
                             logger.debug(f"Sending {task} to {client_name}")
-                            task["config"] = chatmodule.config_json
                             try:
                                 await asyncio.wait_for(controller.send_json(task), timeout=5.0)
                             except asyncio.TimeoutError:
@@ -143,12 +159,27 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                                 logger.info(f"Error sending to client {client_name}: {e}")
                                 client_disconnected = True
                                 break
+                elif skip:
+                    task["config"] = {}
+                    if task["type"] in client_required_events:
+                        logger.debug(f"Sending {task} to {client_name}")
+                        try:
+                            await asyncio.wait_for(controller.send_json(task), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            logger.info(f"Client {client_name} did not respond to send, disconnecting.")
+                            client_disconnected = True
+                            break
+                        except Exception as e:
+                            logger.info(f"Error sending to client {client_name}: {e}")
+                            client_disconnected = True
+                            break
             if client_disconnected:
                 break
 
             await asyncio.sleep(0.05)
 
     except Exception as e:
+        raise e
         logger.info(f"Client {client_name} disconnected: {e}")
     finally:
         writer.close()
@@ -180,6 +211,7 @@ async def handler(event: events.NewMessage.Event):
         for q in tasks.values():
             task = {
                 "type": 1,
+                "is_private": event.is_private,
                 "payload": {
                     "chat_id": sender,
                     "message": message,
@@ -198,6 +230,7 @@ async def message_edited(event: events.MessageEdited.Event):
         for q in tasks.values():
             task = {
                 "type": 2,
+                "is_private": event.is_private,
                 "payload": {
                     "chat_id": extract_chat_id(event),
                     "message": event.message.text,

@@ -30,6 +30,7 @@ class Module(Model):
     id = fields.UUIDField(pk=True, default=uuid.uuid4)
     name = fields.CharField(max_length=20)
     description = fields.TextField(max_length=200, default="")
+    system_config = fields.JSONField(default={})
     
     key = fields.CharField(max_length=40, unique=True, null=True)
 
