@@ -40,17 +40,34 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     controller = AsyncSocketController(reader, writer)
     
     client_info = None
-    while not client_info:
-        try:
-            client_info = await controller.read_json()
-        except Exception:
-            await asyncio.sleep(0.1)
+
+    # --- HANDSHAKE STAGE ---
+    try:
+        while not client_info:
+            try:
+                # Set timeout for handshake
+                client_info = await asyncio.wait_for(controller.read_json(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.info(f"Client {peername} did not respond during handshake, disconnecting.")
+                writer.close()
+                await writer.wait_closed()
+                return
+            except Exception:
+                await asyncio.sleep(0.1)
+    except Exception as e:
+        logger.info(f"Exception during handshake with {peername}: {e}")
+        writer.close()
+        await writer.wait_closed()
+        return
 
     client_key = client_info["key"]
     
     db_module = await Module.filter(key=client_key).first()
     if not db_module:
         await controller.send_json({"connected": False, "error": "No module with such key"})
+        logger.info(f"Module with key {client_key} not found. Client {peername} disconnected.")
+        writer.close()
+        await writer.wait_closed()
         return
     
     client_name = db_module.name
@@ -67,14 +84,30 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
     try:
         while True:
-            if await controller.data_available():
-                try:
-                    data = await controller.read_json()
-                    logger.debug("Received:", data)
-                    await to_work_tasks.put(data)
-                except Exception as e:
-                    logger.info(f"Error reading from client {client_name}: {e}")
+            client_disconnected = False
+
+            # --- READ FROM CLIENT WITH TIMEOUT ---
+            try:
+                if await controller.data_available():
+                    try:
+                        # Timeout for reading a message from client
+                        data = await asyncio.wait_for(controller.read_json(), timeout=5.0)
+                        logger.debug("Received:", data)
+                        await to_work_tasks.put(data)
+                    except asyncio.TimeoutError:
+                        logger.info(f"Client {client_name} did not respond in time, disconnecting.")
+                        client_disconnected = True
+                        break
+                    except Exception as e:
+                        logger.info(f"Error reading from client {client_name}: {e}")
+                        client_disconnected = True
+                        break
+            except Exception as e:
+                logger.info(f"Exception when polling client {client_name}: {e}")
+                client_disconnected = True
+                break
             
+            # --- SEND TASKS TO CLIENT ---
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
@@ -84,24 +117,46 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     if task["type"] in client_required_events:
                         logger.debug(f"Sending {task} to {client_name}")
                         task["config"] = chatmodule.config_json
-                        await controller.send_json(task)
+                        try:
+                            await asyncio.wait_for(controller.send_json(task), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            logger.info(f"Client {client_name} did not respond to send, disconnecting.")
+                            client_disconnected = True
+                            break
+                        except Exception as e:
+                            logger.info(f"Error sending to client {client_name}: {e}")
+                            client_disconnected = True
+                            break
                 if chat:
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
                         if task["type"] in client_required_events:
                             logger.debug(f"Sending {task} to {client_name}")
                             task["config"] = chatmodule.config_json
-                            await controller.send_json(task)
+                            try:
+                                await asyncio.wait_for(controller.send_json(task), timeout=5.0)
+                            except asyncio.TimeoutError:
+                                logger.info(f"Client {client_name} did not respond to send, disconnecting.")
+                                client_disconnected = True
+                                break
+                            except Exception as e:
+                                logger.info(f"Error sending to client {client_name}: {e}")
+                                client_disconnected = True
+                                break
+            if client_disconnected:
+                break
 
             await asyncio.sleep(0.05)
 
     except Exception as e:
         logger.info(f"Client {client_name} disconnected: {e}")
+    finally:
         writer.close()
         await writer.wait_closed()
         async with clients_lock:
-            clients.discard(client_name)
-            tasks.pop(client_name, None)
+            clients.discard(client_key)
+            tasks.pop(client_key, None)
+        logger.info(f"Client {client_name} connection closed and cleaned up.")
 
 async def start_server():
     server = await asyncio.start_server(process_client, HOST, PORT)
