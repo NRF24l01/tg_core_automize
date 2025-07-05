@@ -143,11 +143,8 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 if chat and not skip:
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
-                        task["config"] = chatmodule.config_json
-                    else:
-                        task["config"] = {}
-                    if chatmodule or skip:
                         if task["type"] in client_required_events:
+                            task["config"] = chatmodule.config_json
                             logger.debug(f"Sending {task} to {client_name}")
                             try:
                                 await asyncio.wait_for(controller.send_json(task), timeout=5.0)
