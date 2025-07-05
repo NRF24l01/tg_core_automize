@@ -1,6 +1,7 @@
 from telethon import TelegramClient, events
 from models import Chat, Module, ChatModule
 from json import loads, decoder, dumps
+from modules import extract_chat_id
 
 
 def set_nested(d: dict, keys: list[str], value):
@@ -12,7 +13,7 @@ def set_nested(d: dict, keys: list[str], value):
 
 async def process_message(event: events.NewMessage, client: TelegramClient):
     message = event.raw_text
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     from_my = event.message.out
 
     if not from_my:
@@ -37,7 +38,7 @@ async def process_message(event: events.NewMessage, client: TelegramClient):
 
 
 async def process_init_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     msg = await client.send_message(
         chat_id,
         f"Запрос на инициализацию чата({chat_id}) принят.",
@@ -55,7 +56,7 @@ async def process_init_message(event: events.NewMessage, client: TelegramClient)
 
 
 async def process_modreg_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
 
     parts = event.raw_text.strip().split()
     if len(parts) < 3:
@@ -89,7 +90,7 @@ async def process_modreg_message(event: events.NewMessage, client: TelegramClien
 
 
 async def process_config_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     parts = event.raw_text.strip().split()
 
     if len(parts) <3:
@@ -182,7 +183,7 @@ async def process_config_message(event: events.NewMessage, client: TelegramClien
 
 
 async def process_modprobe_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     parts = event.raw_text.strip().split()
 
     if len(parts) != 2:
@@ -221,7 +222,7 @@ async def process_modprobe_message(event: events.NewMessage, client: TelegramCli
 
 
 async def process_rmmode_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     parts = event.raw_text.strip().split()
 
     if len(parts) != 2:
@@ -260,7 +261,7 @@ async def process_rmmode_message(event: events.NewMessage, client: TelegramClien
 
 
 async def process_lsmod_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
 
     msg = await client.send_message(
         chat_id, f"Обрабатываем запрос", reply_to=event.message
@@ -278,7 +279,7 @@ async def process_lsmod_message(event: events.NewMessage, client: TelegramClient
 
 
 async def process_modinfo_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     parts = event.raw_text.strip().split()
 
     if len(parts) != 2:
@@ -307,7 +308,7 @@ async def process_modinfo_message(event: events.NewMessage, client: TelegramClie
 
 
 async def process_modcfg_message(event: events.NewMessage, client: TelegramClient):
-    chat_id = event.chat_id
+    chat_id = extract_chat_id(event)
     parts = event.raw_text.strip().split()
 
     if len(parts) <3:
