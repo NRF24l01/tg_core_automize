@@ -274,6 +274,7 @@ async def handler(event: events.NewMessage.Event):
                         logger.debug(f"Checking if media exists in S3: {s3_key}")
                         s3.head_object(Bucket=S3_BUCKET, Key=s3_key)
                         logger.info(f"Media already exists in S3: {s3_key}")
+                        media_uploaded = True
                     except s3.exceptions.ClientError as e:
                         code = e.response["ResponseMetadata"]["HTTPStatusCode"]
                         logger.debug(f"S3 head_object response code: {code}")
