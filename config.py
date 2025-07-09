@@ -18,8 +18,6 @@ S3_USERNAME = getenv("S3_USERNAME")
 S3_PASSWORD = getenv("S3_PASSWORD")
 S3_BUCKET = getenv("S3_BUCKET")
 
-print(S3_ENDPOINT, S3_PASSWORD, S3_USERNAME)
-
 # Db config
 TORTOISE_ORM = {
     "connections": {"default": "sqlite://db.sqlite3"},
