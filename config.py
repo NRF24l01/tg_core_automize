@@ -12,6 +12,14 @@ SESSION_NAME = getenv("SESSION_NAME")
 HOST = getenv("HOST", "127.0.0.1")
 PORT = int(getenv("PORT", "4375"))
 
+# S3 config
+S3_ENDPOINT = getenv("S3_ENDPOINT", "http://127.0.0.1:9000")
+S3_USERNAME = getenv("S3_USERNAME")
+S3_PASSWORD = getenv("S3_PASSWORD")
+S3_BUCKET = getenv("S3_BUCKET")
+
+print(S3_ENDPOINT, S3_PASSWORD, S3_USERNAME)
+
 # Db config
 TORTOISE_ORM = {
     "connections": {"default": "sqlite://db.sqlite3"},

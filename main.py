@@ -1,18 +1,34 @@
 import asyncio
 import json
 from telethon import TelegramClient, events
-from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH
-from datetime import datetime
+from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH, S3_ENDPOINT, S3_PASSWORD, S3_USERNAME, S3_BUCKET
+from datetime import datetime, timezone, timedelta
 from modules import Logger, AsyncSocketController, serialize_sender, extract_chat_id
 from command_processer import process_message
 from tortoise import Tortoise, run_async
 from migrate import run_migrations
 from models import Module, Chat, ChatModule
+from boto3 import client as boto3client
+from botocore.exceptions import ClientError
+from botocore.client import Config
+import os
+import hashlib
+import tempfile
+from telethon.tl.types import DocumentAttributeAudio, DocumentAttributeVideo
 
 to_work_tasks = asyncio.Queue()
 tasks: dict[str, asyncio.Queue] = {}
 clients = set()
 clients_lock = asyncio.Lock()
+
+s3 = boto3client(
+    's3',
+    endpoint_url=S3_ENDPOINT,
+    aws_access_key_id=S3_USERNAME,
+    aws_secret_access_key=S3_PASSWORD,
+    config=Config(signature_version='s3v4'),
+    region_name='us-east-1',
+)
 
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 logger = Logger()
@@ -23,6 +39,31 @@ async def init():
         modules={'models': ['models']}
     )
     await Tortoise.generate_schemas()
+
+async def cleanup_old_s3_files():
+    logger = Logger()
+    while True:
+        logger.info("Запущена задача очистки S3...")
+        try:
+            paginator = s3.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=S3_BUCKET)
+
+            now = datetime.now(timezone.utc)
+            for page in pages:
+                for obj in page.get('Contents', []):
+                    key = obj['Key']
+                    last_modified = obj['LastModified']
+                    age = now - last_modified
+                    if age > timedelta(days=7):
+                        try:
+                            await asyncio.to_thread(s3.delete_object, Bucket=S3_BUCKET, Key=key)
+                            logger.info(f"Удалён устаревший файл: {key}")
+                        except ClientError as e:
+                            logger.error(f"Ошибка при удалении {key}: {e}")
+        except Exception as e:
+            logger.error(f"Ошибка при сканировании S3: {e}")
+
+        await asyncio.sleep(86400)  # раз в сутки
 
 async def process_tasks():
     while True:
@@ -202,6 +243,60 @@ async def handler(event: events.NewMessage.Event):
     timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
     
     sender_obj = await event.get_sender()
+    
+    # Download and add to s3 media block
+    media_uploaded = False
+    if event.message.reply_to_msg_id:
+        logger.debug(f"Message is a reply, ID: {event.message.reply_to_msg_id}")
+        try:
+            reply = await event.get_reply_message()
+            logger.debug(f"Got reply message: ID={reply.id}, media={bool(reply.media)}")
+
+            doc = reply.media.document if reply.media and hasattr(reply.media, 'document') else None
+            if doc:
+                logger.debug("Reply contains a document")
+                attrs = doc.attributes
+                is_voice = any(isinstance(a, DocumentAttributeAudio) and getattr(a, "voice", False) for a in attrs)
+                is_round = any(isinstance(a, DocumentAttributeVideo) and getattr(a, "round_message", False) for a in attrs)
+
+                logger.debug(f"is_voice={is_voice}, is_round={is_round}")
+
+                if is_voice or is_round:
+                    media_type = "voice" if is_voice else "round"
+                    msg_id = reply.id
+                    extension = ".ogg" if is_voice else ".mp4"
+                    s3_key = f"{media_type}_{msg_id}{extension}"
+
+                    logger.debug(f"Generated S3 key: {s3_key}")
+
+                    # Проверяем, существует ли уже в S3
+                    try:
+                        logger.debug(f"Checking if media exists in S3: {s3_key}")
+                        s3.head_object(Bucket=S3_BUCKET, Key=s3_key)
+                        logger.info(f"Media already exists in S3: {s3_key}")
+                    except s3.exceptions.ClientError as e:
+                        code = e.response["ResponseMetadata"]["HTTPStatusCode"]
+                        logger.debug(f"S3 head_object response code: {code}")
+                        if code == 404:
+                            logger.debug(f"Media not found in S3, downloading and uploading: {s3_key}")
+                            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                                logger.debug(f"Downloading media to temporary file: {tmp.name}")
+                                await client.download_media(reply.media, file=tmp.name)
+                                tmp.flush()
+                                tmp.seek(0)
+
+                                s3.upload_file(tmp.name, S3_BUCKET, s3_key)
+                                logger.info(f"Uploaded media to S3: {s3_key}")
+                                media_uploaded = True
+                            os.unlink(tmp.name)
+                            logger.debug(f"Temporary file deleted: {tmp.name}")
+                        else:
+                            logger.error(f"S3 head_object error: {e}")
+            else:
+                logger.debug("Reply does not contain a document")
+        except Exception as e:
+            logger.error(f"Failed to process reply media: {e}")
+
 
     # Рассылаем задачу всем клиентам
     async with clients_lock:
@@ -215,7 +310,8 @@ async def handler(event: events.NewMessage.Event):
                     "timestamp": timestamp,
                     "my_message": event.message.out,
                     "msg_id": event.message.id,
-                    "sender": serialize_sender(sender_obj)
+                    "sender": serialize_sender(sender_obj),
+                    "reply_to_media_id": s3_key if media_uploaded else False
                 }
             }
             await q.put(task)
@@ -265,7 +361,8 @@ async def main():
     await asyncio.gather(
         start_server(),
         client.run_until_disconnected(),
-        process_tasks()
+        process_tasks(),
+        cleanup_old_s3_files(),
     )
 
 if __name__ == "__main__":
