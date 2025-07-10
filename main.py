@@ -1,5 +1,4 @@
 import asyncio
-import json
 from telethon import TelegramClient, events
 from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH, S3_ENDPOINT, S3_PASSWORD, S3_USERNAME, S3_BUCKET
 from datetime import datetime, timezone, timedelta
@@ -12,7 +11,6 @@ from boto3 import client as boto3client
 from botocore.exceptions import ClientError
 from botocore.client import Config
 import os
-import hashlib
 import tempfile
 from telethon.tl.types import DocumentAttributeAudio, DocumentAttributeVideo
 
