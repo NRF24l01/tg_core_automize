@@ -43,34 +43,29 @@ class SocketController:
     
 
 class AsyncSocketController:
-    def __init__(self, reader: asyncio.StreamReader | None = None, writer: asyncio.StreamWriter | None = None):
-        if not reader or not writer:
-            self.reader = reader
-            self.writer = writer
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        self.reader = reader
+        self.writer = writer
         self._buffer = bytearray()  # внутренний буфер для данных, которые прочитали, но ещё не обработали
-        self._write_lock = asyncio.Lock()
-        self._read_lock = asyncio.Lock()
 
     async def send_raw(self, raw: bytes):
         length = pack("<I", len(raw))
-        async with self._write_lock:
-            self.writer.write(length + raw)
-            await self.writer.drain()
+        self.writer.write(length + raw)
+        await self.writer.drain()
 
     async def _read_exactly(self, n: int) -> bytes:
-        async with self._read_lock:
-            # Сначала пытаемся взять из буфера
-            if len(self._buffer) >= n:
-                result = self._buffer[:n]
-                self._buffer = self._buffer[n:]
-                return bytes(result)
-
-            # Если в буфере недостаточно — докачиваем с ридера
-            needed = n - len(self._buffer)
-            data = await self.reader.readexactly(needed)
-            result = self._buffer + data
-            self._buffer.clear()
+        # Сначала пытаемся взять из буфера
+        if len(self._buffer) >= n:
+            result = self._buffer[:n]
+            self._buffer = self._buffer[n:]
             return bytes(result)
+
+        # Если в буфере недостаточно — докачиваем с ридера
+        needed = n - len(self._buffer)
+        data = await self.reader.readexactly(needed)
+        result = self._buffer + data
+        self._buffer.clear()
+        return bytes(result)
 
     async def read_raw(self) -> bytes:
         len_bytes = await self._read_exactly(4)
@@ -87,17 +82,16 @@ class AsyncSocketController:
         return json.loads(raw.decode("utf-8"))
 
     async def data_available(self) -> bool:
-        async with self._read_lock:
-            # Проверяем есть ли уже данные в буфере
-            if self._buffer:
+        # Проверяем есть ли уже данные в буфере
+        if self._buffer:
+            return True
+        
+        # Попробуем неблокирующе прочитать данные (если есть) с помощью wait_for с 0.01 сек
+        try:
+            data = await asyncio.wait_for(self.reader.read(1024), timeout=0.01)
+            if data:
+                self._buffer.extend(data)
                 return True
-
-            # Попробуем неблокирующе прочитать данные (если есть) с помощью wait_for с 0.01 сек
-            try:
-                data = await asyncio.wait_for(self.reader.read(1024), timeout=0.01)
-                if data:
-                    self._buffer.extend(data)
-                    return True
-                return False
-            except asyncio.TimeoutError:
-                return False
+            return False
+        except asyncio.TimeoutError:
+            return False
