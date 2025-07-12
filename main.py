@@ -76,7 +76,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     logger = Logger()
     peername = writer.get_extra_info('peername')
     logger.info(f"Start client processing from {peername}")
-    controller = AsyncSocketController(reader, writer)
+    controller = AsyncSocketController(None, reader, writer)
     
     client_info = None
 

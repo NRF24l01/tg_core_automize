@@ -4,63 +4,68 @@ from struct import pack, unpack
 from socket import socket
 from json import loads, dumps
 from select import select
+import threading
 
 
 class SocketController:
-    def __init__(self, socket: socket):
+    def __init__(self, socket: socket, logger=None):
         self.socket = socket
-        
+        self._send_lock = threading.Lock()
+        self._read_lock = threading.Lock()
+
     def send_raw(self, raw: bytes):
-        self.socket.send(pack("<I", len(raw)))
-        self.socket.send(raw)
-    
+        with self._send_lock:
+            self.socket.send(pack("<I", len(raw)))
+            self.socket.send(raw)
+
     def read_raw(self) -> bytes:
-        len_unprocessed = b""
-        while len(len_unprocessed) != 4:
-            len_unprocessed += self.socket.recv(4-len(len_unprocessed))
-        payload_len = int(unpack('<I', len_unprocessed)[0])
-        payload = b""
-        while len(payload) != payload_len:
-            payload += self.socket.recv(payload_len-len(payload))
+        with self._read_lock:
+            len_unprocessed = b""
+            while len(len_unprocessed) != 4:
+                part = self.socket.recv(4 - len(len_unprocessed))
+                len_unprocessed += part
+            payload_len = unpack('<I', len_unprocessed)[0]
+            payload = b""
+            while len(payload) != payload_len:
+                part = self.socket.recv(payload_len - len(payload))
+                payload += part
         return payload
-    
+
     def send_json(self, payload: dict | list):
         self.send_raw(dumps(payload).encode("UTF-8"))
-    
+
     def data_avalible(self) -> bool:
         ready_to_read, _, _ = select([self.socket], [], [], 0)
-        if not ready_to_read:
-            return False
-        return True
-    
+        return bool(ready_to_read)
+
     def read_json(self, untill_packet: bool = False) -> dict | list | None:
         if not untill_packet:
             ready_to_read, _, _ = select([self.socket], [], [], 0)
             if not ready_to_read:
                 return None
-        
-        return loads(self.read_raw().decode("UTF-8"))
-    
+        raw = self.read_raw()
+        return loads(raw.decode("UTF-8"))
+
 
 class AsyncSocketController:
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(self, logger=None, reader: asyncio.StreamReader | None = None, writer: asyncio.StreamWriter | None = None):
         self.reader = reader
         self.writer = writer
-        self._buffer = bytearray()  # внутренний буфер для данных, которые прочитали, но ещё не обработали
+        self._send_lock = asyncio.Lock()
+        self._read_lock = asyncio.Lock()
+        self._buffer = bytearray()
 
     async def send_raw(self, raw: bytes):
-        length = pack("<I", len(raw))
-        self.writer.write(length + raw)
-        await self.writer.drain()
+        async with self._send_lock:
+            length = pack("<I", len(raw))
+            self.writer.write(length + raw)
+            await self.writer.drain()
 
     async def _read_exactly(self, n: int) -> bytes:
-        # Сначала пытаемся взять из буфера
         if len(self._buffer) >= n:
             result = self._buffer[:n]
             self._buffer = self._buffer[n:]
             return bytes(result)
-
-        # Если в буфере недостаточно — докачиваем с ридера
         needed = n - len(self._buffer)
         data = await self.reader.readexactly(needed)
         result = self._buffer + data
@@ -68,9 +73,10 @@ class AsyncSocketController:
         return bytes(result)
 
     async def read_raw(self) -> bytes:
-        len_bytes = await self._read_exactly(4)
-        payload_len = unpack("<I", len_bytes)[0]
-        payload = await self._read_exactly(payload_len)
+        async with self._read_lock:
+            len_bytes = await self._read_exactly(4)
+            payload_len = unpack("<I", len_bytes)[0]
+            payload = await self._read_exactly(payload_len)
         return payload
 
     async def send_json(self, payload: dict | list):
@@ -82,11 +88,8 @@ class AsyncSocketController:
         return json.loads(raw.decode("utf-8"))
 
     async def data_available(self) -> bool:
-        # Проверяем есть ли уже данные в буфере
         if self._buffer:
             return True
-        
-        # Попробуем неблокирующе прочитать данные (если есть) с помощью wait_for с 0.01 сек
         try:
             data = await asyncio.wait_for(self.reader.read(1024), timeout=0.01)
             if data:
@@ -94,4 +97,6 @@ class AsyncSocketController:
                 return True
             return False
         except asyncio.TimeoutError:
+            return False
+        except Exception:
             return False
