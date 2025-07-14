@@ -75,6 +75,7 @@ async def process_tasks():
                     to_return["direct"] = True
                     to_return["target"] = task["module_name"]
                     to_return["message"] = message.to_dict()
+                    to_return["type"] = 0
                     async with clients_lock:
                         for q in tasks.values():
                             q.put(to_return)
