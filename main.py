@@ -80,7 +80,7 @@ async def process_tasks():
                         for q in tasks.values():
                             q.put(to_return)
             elif task["type"] == 2:
-                await client.edit_message(task["chat_id"], task["message_id"], task["text"])
+                await client.edit_message(task["payload"]["chat_id"], task["payload"]["message_id"], task["payload"]["text"])
         await asyncio.sleep(0.1)
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
