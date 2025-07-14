@@ -68,6 +68,7 @@ async def process_tasks():
         while not to_work_tasks.empty():
             task = await to_work_tasks.get()
             if task["type"] == 1:
+                logger.debug(f"Got new task for processing: {task}")
                 to_id = int(task["payload"]["to"])
                 message_text = task["payload"]["message"]
                 reply_to = task["payload"].get("reply_to")
@@ -82,12 +83,15 @@ async def process_tasks():
                     to_return = {}
                     to_return["direct"] = True
                     to_return["target"] = task["module_name"]
-                    to_return["message"] = message.to_dict()
+                    to_return["message"] = {
+                        "id": message.id
+                    }
                     to_return["chat_id"] = message.chat_id
                     to_return["type"] = 0
                     async with clients_lock:
                         for q in tasks.values():
-                            q.put(to_return)
+                            await q.put(to_return)
+                    logger.debug("Returned message info")
             elif task["type"] == 2:
                 await client.edit_message(task["payload"]["chat_id"], task["payload"]["message_id"], task["payload"]["text"])
         await asyncio.sleep(0.1)
@@ -171,6 +175,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
+                logger.debug(f"{client_name} - Got new task, processing")
                 if task.get("direct", False):
                     if task.get("target", "") == client_name:
                         try:
@@ -184,9 +189,8 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             client_disconnected = True
                             break
                     else:
+                        logger.debug(f"{client_name} this isnot for me")
                         continue
-                else:
-                    continue
                 
                 try:
                     await db_module.refresh_from_db()  # ← Получаем свежие данные из БД
