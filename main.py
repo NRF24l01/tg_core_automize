@@ -70,7 +70,7 @@ async def process_tasks():
             if task["type"] == 1:
                 message = await client.send_message(int(task["payload"]["to"]), task["payload"]["message"])
                 logger.info(f"Done task: sending message to {task['payload']['to']}")
-                if task.get("module_name", "") != "":
+                if task.get("module_name", "") != "" and task.get("require_answer", False):
                     to_return = {}
                     to_return["direct"] = True
                     to_return["target"] = task["module_name"]
@@ -78,6 +78,8 @@ async def process_tasks():
                     async with clients_lock:
                         for q in tasks.values():
                             q.put(to_return)
+            elif task["type"] == 2:
+                await client.edit_message(task["chat_id"], task["message_id"], task["text"])
         await asyncio.sleep(0.1)
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
