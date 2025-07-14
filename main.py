@@ -68,7 +68,15 @@ async def process_tasks():
         while not to_work_tasks.empty():
             task = await to_work_tasks.get()
             if task["type"] == 1:
-                message = await client.send_message(int(task["payload"]["to"]), task["payload"]["message"])
+                to_id = int(task["payload"]["to"])
+                message_text = task["payload"]["message"]
+                reply_to = task["payload"].get("reply_to")
+
+                message = await client.send_message(
+                    to_id,
+                    message_text,
+                    reply_to=reply_to if reply_to is not None else None
+                )
                 logger.info(f"Done task: sending message to {task['payload']['to']}")
                 if task.get("module_name", "") != "" and task.get("require_answer", False):
                     to_return = {}
