@@ -68,8 +68,16 @@ async def process_tasks():
         while not to_work_tasks.empty():
             task = await to_work_tasks.get()
             if task["type"] == 1:
-                await client.send_message(int(task["payload"]["to"]), task["payload"]["message"])
+                message = await client.send_message(int(task["payload"]["to"]), task["payload"]["message"])
                 logger.info(f"Done task: sending message to {task['payload']['to']}")
+                if task.get("module_name", "") != "":
+                    to_return = {}
+                    to_return["direct"] = True
+                    to_return["target"] = task["module_name"]
+                    to_return["message"] = message.to_dict()
+                    async with clients_lock:
+                        for q in tasks.values():
+                            q.put(to_return)
         await asyncio.sleep(0.1)
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -132,6 +140,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         # Timeout for reading a message from client
                         data = await asyncio.wait_for(controller.read_json(), timeout=5.0)
                         logger.debug("Received:", data)
+                        data["module_name"] = client_name
                         await to_work_tasks.put(data)
                     except asyncio.TimeoutError:
                         logger.info(f"Client {client_name} did not respond in time, disconnecting.")
@@ -150,6 +159,22 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             q = tasks[client_key]
             while not q.empty():
                 task = await q.get()
+                if task.get("direct", False):
+                    if task.get("target", "") == client_name:
+                        try:
+                            await asyncio.wait_for(controller.send_json(task), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            logger.info(f"Client {client_name} did not respond to send, disconnecting.")
+                            client_disconnected = True
+                            break
+                        except Exception as e:
+                            logger.info(f"Error sending to client {client_name}: {e}")
+                            client_disconnected = True
+                            break
+                    else:
+                        continue
+                else:
+                    continue
                 
                 try:
                     await db_module.refresh_from_db()  # ← Получаем свежие данные из БД
