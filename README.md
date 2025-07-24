@@ -14,6 +14,8 @@
     - Если нужно что-то сделать, говорим это сделать
 
 ## Как эту штуку поднять?
+- Зависимости
+    - Minio
 - Изначально предполагается запуск без докера, по нескольким причинам
     - Тут нужен доступ во внешний мир, а `network: host` я не уважаю
     - Не удобно обновлять файл сессии в случае чего, так ты просто `systemctl stop` и потом `python3 main.py`
@@ -23,6 +25,8 @@
 cd ~
 git clone https://github.com/NRF24l01/tg_core_automize
 cd tg_core_automize
+cp .env.example .env
+vim .env # НЕОБХОДИМО ЗАПОЛНИТЬ КОНФИГ
 python3 main.py # Тут вам нужно будет авторизоваться, когда войдёте смело выключайте
 sudo cp tg_core_worker.service /etc/systemd/system/tg_core_worker.service
 sudo vim /etc/systemd/system/tg_core_worker.service # Нужно заменить <YOUR NICKNAME> на имя вашего пользователя
