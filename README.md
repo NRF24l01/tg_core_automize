@@ -13,6 +13,23 @@
     - Получает сообщение, если оно к нему относится, обрабатывает, если нет то пофиг
     - Если нужно что-то сделать, говорим это сделать
 
+## Как эту штуку поднять?
+- Изначально предполагается запуск без докера, по нескольким причинам
+    - Тут нужен доступ во внешний мир, а `network: host` я не уважаю
+    - Не удобно обновлять файл сессии в случае чего, так ты просто `systemctl stop` и потом `python3 main.py`
+    - Нужно будет сеть настраивать чтоб между контейнерами общаться
+- Ставится всё просто:
+```shell
+cd ~
+git clone https://github.com/NRF24l01/tg_core_automize
+cd tg_core_automize
+python3 main.py # Тут вам нужно будет авторизоваться, когда войдёте смело выключайте
+sudo cp tg_core_worker.service /etc/systemd/system/tg_core_worker.service
+sudo vim /etc/systemd/system/tg_core_worker.service # Нужно заменить <YOUR NICKNAME> на имя вашего пользователя
+sudo systemctl daemon-reload
+sudo systemctl enable --now tg_core_worker
+```
+
 ## Как эти болванки общаются?
 *Собсна тут у нас есть n стульев*
 - http запрос с проверкой есть ли новые месаджи(как тг бот)  **-**
