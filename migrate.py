@@ -17,8 +17,8 @@ async def run_migrations():
     else:
         print("Миграции уже инициализированы. Пропускаем init_db.")
         
-    await command.migrate()             # Генерирует миграции
-    await command.upgrade()             # Применяет миграции
+    await command.migrate()
+    await command.upgrade()
     await Tortoise.close_connections()
 
 if __name__ == "__main__":

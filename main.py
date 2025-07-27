@@ -193,7 +193,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         continue
                 
                 try:
-                    await db_module.refresh_from_db()  # ← Получаем свежие данные из БД
+                    await db_module.refresh_from_db()
                 except Exception as e:
                     logger.info(f"Error refreshing db_module for client {client_name}: {e}")
                     continue
@@ -308,7 +308,6 @@ async def handler(event: events.NewMessage.Event):
 
                     logger.debug(f"Generated S3 key: {s3_key}")
 
-                    # Проверяем, существует ли уже в S3
                     try:
                         logger.debug(f"Checking if media exists in S3: {s3_key}")
                         s3.head_object(Bucket=S3_BUCKET, Key=s3_key)
@@ -338,7 +337,6 @@ async def handler(event: events.NewMessage.Event):
             logger.error(f"Failed to process reply media: {e}")
 
 
-    # Рассылаем задачу всем клиентам
     async with clients_lock:
         for q in tasks.values():
             task = {
@@ -388,7 +386,6 @@ async def message_deleted(event: events.MessageDeleted.Event):
                 await q.put(task)
 
 
-# --- Главный AsyncIO запуск ---
 async def main():
     logger.info("Starting...")
 

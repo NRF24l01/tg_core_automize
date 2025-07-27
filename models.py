@@ -38,11 +38,9 @@ class Module(Model):
     default_config_json = fields.JSONField(default={})
 
     def get_required_msgs(self) -> List[int]:
-        # Ensure the list contains only ints
         return [int(x) for x in self.required_msgs]
 
     def set_required_msgs(self, new_list: List[int]) -> None:
-        # Validate input and set
         if not all(isinstance(x, int) for x in new_list):
             raise ValueError("All items must be integers")
         self.required_msgs = new_list
@@ -52,7 +50,7 @@ class Module(Model):
 @pre_save(Module)
 async def generate_key_if_missing(sender, instance: Module, using_db, update_fields: Optional[list[str]]):
     if not instance.key:
-        for _ in range(5):  # Пять попыток на случай коллизий
+        for _ in range(5):
             candidate = generate_random_key()
             if not await Module.filter(key=candidate).exists():
                 instance.key = candidate
