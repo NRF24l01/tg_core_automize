@@ -39,7 +39,6 @@ async def init():
     await Tortoise.generate_schemas()
 
 async def cleanup_old_s3_files():
-    logger = Logger()
     while True:
         logger.info("Запущена задача очистки S3...")
         try:
@@ -97,7 +96,6 @@ async def process_tasks():
         await asyncio.sleep(0.1)
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-    logger = Logger()
     peername = writer.get_extra_info('peername')
     logger.info(f"Start client processing from {peername}")
     controller = AsyncSocketController(None, reader, writer)
