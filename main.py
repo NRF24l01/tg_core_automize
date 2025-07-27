@@ -88,13 +88,80 @@ async def process_tasks():
                     }
                     to_return["chat_id"] = message.chat_id
                     to_return["type"] = 0
-                    async with clients_lock:
-                        for q in tasks.values():
-                            await q.put(to_return)
+                    await distribute_task_to_clients(to_return)
                     logger.debug("Returned message info")
             elif task["type"] == 2:
                 await client.edit_message(task["payload"]["chat_id"], task["payload"]["message_id"], task["payload"]["text"])
         await asyncio.sleep(0.1)
+
+async def distribute_task_to_clients(task):
+    """Distribute a task to all connected clients"""
+    async with clients_lock:
+        for q in tasks.values():
+            await q.put(task)
+
+async def send_json_with_timeout(controller, data, timeout=5.0, client_name="Unknown"):
+    """Send JSON data with timeout handling"""
+    try:
+        return await asyncio.wait_for(controller.send_json(data), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.info(f"Client {client_name} did not respond to send, disconnecting.")
+        return False
+    except Exception as e:
+        logger.info(f"Error sending to client {client_name}: {e}")
+        return False
+
+async def read_json_with_timeout(controller, timeout=5.0, client_name="Unknown"):
+    """Read JSON data with timeout handling"""
+    try:
+        return await asyncio.wait_for(controller.read_json(), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.info(f"Client {client_name} did not respond in time, disconnecting.")
+        return None
+    except Exception as e:
+        logger.info(f"Error reading from client {client_name}: {e}")
+        return None
+
+async def should_send_to_client(task, db_module, client_required_events):
+    """Determine if a task should be sent to a client based on configuration"""
+    if task.get("direct", False):
+        return task.get("target", "") == db_module.name
+    
+    # Check if the task type is in required events
+    if task["type"] not in client_required_events:
+        return False
+    
+    # Check for private message skipping
+    if db_module.system_config.get("skip_private", False) is True and task.get("is_private", False):
+        task["config"] = {}
+        return True
+    
+    # Check chat-specific configurations
+    try:
+        chat_id = int(task["payload"]["chat_id"])
+        chat = await Chat.filter(chat_id=chat_id).first()
+        if chat:
+            chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
+            if chatmodule:
+                task["config"] = chatmodule.config_json
+                return True
+        else:
+            task["config"] = {}
+            return True
+    except KeyError:
+        task["config"] = {}
+        return True
+    
+    return False
+
+async def cleanup_client(client_key, client_name, writer):
+    """Clean up resources when a client disconnects"""
+    writer.close()
+    await writer.wait_closed()
+    async with clients_lock:
+        clients.discard(client_key)
+        tasks.pop(client_key, None)
+    logger.info(f"Client {client_name} connection closed and cleaned up.")
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     logger = Logger()
@@ -152,20 +219,14 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             # --- READ FROM CLIENT WITH TIMEOUT ---
             try:
                 if await controller.data_available():
-                    try:
-                        # Timeout for reading a message from client
-                        data = await asyncio.wait_for(controller.read_json(), timeout=5.0)
-                        logger.debug("Received:", data)
-                        data["module_name"] = client_name
-                        await to_work_tasks.put(data)
-                    except asyncio.TimeoutError:
-                        logger.info(f"Client {client_name} did not respond in time, disconnecting.")
+                    data = await read_json_with_timeout(controller, timeout=5.0, client_name=client_name)
+                    if data is None:
                         client_disconnected = True
                         break
-                    except Exception as e:
-                        logger.info(f"Error reading from client {client_name}: {e}")
-                        client_disconnected = True
-                        break
+                    
+                    logger.debug("Received:", data)
+                    data["module_name"] = client_name
+                    await to_work_tasks.put(data)
             except Exception as e:
                 logger.info(f"Exception when polling client {client_name}: {e}")
                 client_disconnected = True
@@ -176,215 +237,172 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             while not q.empty():
                 task = await q.get()
                 logger.debug(f"{client_name} - Got new task, processing")
-                if task.get("direct", False):
-                    if task.get("target", "") == client_name:
-                        try:
-                            await asyncio.wait_for(controller.send_json(task), timeout=5.0)
-                        except asyncio.TimeoutError:
-                            logger.info(f"Client {client_name} did not respond to send, disconnecting.")
-                            client_disconnected = True
-                            break
-                        except Exception as e:
-                            logger.info(f"Error sending to client {client_name}: {e}")
-                            client_disconnected = True
-                            break
-                    else:
-                        logger.debug(f"{client_name} this isnot for me")
-                        continue
                 
                 try:
                     await db_module.refresh_from_db()
                 except Exception as e:
                     logger.info(f"Error refreshing db_module for client {client_name}: {e}")
                     continue
-
-                task["system_config"] = db_module.system_config
-                skip = False
-                if db_module.system_config.get("skip_private", False) is True and task.get("is_private", False):
-                    skip = True 
                 
-                try:
-                    chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
-                except KeyError as e:
-                    if task["type"] in client_required_events:
-                        logger.debug(f"Sending {task} to {client_name}")
-                        task["config"] = {}
-                        try:
-                            await asyncio.wait_for(controller.send_json(task), timeout=5.0)
-                            break
-                        except asyncio.TimeoutError:
-                            logger.info(f"Client {client_name} did not respond to send, disconnecting.")
-                            client_disconnected = True
-                            break
-                        except Exception as e:
-                            logger.info(f"Error sending to client {client_name}: {e}")
-                            client_disconnected = True
-                            break
-                if chat and not skip:
-                    chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
-                    if chatmodule:
-                        if task["type"] in client_required_events:
-                            task["config"] = chatmodule.config_json
-                            logger.debug(f"Sending {task} to {client_name}")
-                            try:
-                                await asyncio.wait_for(controller.send_json(task), timeout=5.0)
-                            except asyncio.TimeoutError:
-                                logger.info(f"Client {client_name} did not respond to send, disconnecting.")
-                                client_disconnected = True
-                                break
-                            except Exception as e:
-                                logger.info(f"Error sending to client {client_name}: {e}")
-                                client_disconnected = True
-                                break
-                elif skip:
-                    task["config"] = {}
-                    if task["type"] in client_required_events:
-                        logger.debug(f"Sending {task} to {client_name}")
-                        try:
-                            await asyncio.wait_for(controller.send_json(task), timeout=5.0)
-                        except asyncio.TimeoutError:
-                            logger.info(f"Client {client_name} did not respond to send, disconnecting.")
-                            client_disconnected = True
-                            break
-                        except Exception as e:
-                            logger.info(f"Error sending to client {client_name}: {e}")
-                            client_disconnected = True
-                            break
+                task["system_config"] = db_module.system_config
+                
+                should_send = await should_send_to_client(task, db_module, client_required_events)
+                if should_send:
+                    logger.debug(f"Sending {task} to {client_name}")
+                    if not await send_json_with_timeout(controller, task, timeout=5.0, client_name=client_name):
+                        client_disconnected = True
+                        break
+            
             if client_disconnected:
                 break
 
             await asyncio.sleep(0.05)
 
     except Exception as e:
-        raise e
         logger.info(f"Client {client_name} disconnected: {e}")
     finally:
-        writer.close()
-        await writer.wait_closed()
-        async with clients_lock:
-            clients.discard(client_key)
-            tasks.pop(client_key, None)
-        logger.info(f"Client {client_name} connection closed and cleaned up.")
+        await cleanup_client(client_key, client_name, writer)
 
 async def start_server():
     server = await asyncio.start_server(process_client, HOST, PORT)
     logger.info(f"Socket server running on {HOST}:{PORT}")
     async with server:
         await server.serve_forever()
+
+async def process_media(reply):
+    """Process and upload media to S3 if needed"""
+    if not reply or not reply.media or not hasattr(reply.media, 'document'):
+        logger.debug("Reply does not contain a document")
+        return False, None
+    
+    doc = reply.media.document
+    attrs = doc.attributes
+    is_voice = any(isinstance(a, DocumentAttributeAudio) and getattr(a, "voice", False) for a in attrs)
+    is_round = any(isinstance(a, DocumentAttributeVideo) and getattr(a, "round_message", False) for a in attrs)
+    
+    logger.debug(f"is_voice={is_voice}, is_round={is_round}")
+    
+    if not (is_voice or is_round):
+        return False, None
+    
+    media_type = "voice" if is_voice else "round"
+    msg_id = reply.id
+    extension = ".ogg" if is_voice else ".mp4"
+    s3_key = f"{media_type}_{msg_id}{extension}"
+    
+    logger.debug(f"Generated S3 key: {s3_key}")
+    
+    try:
+        logger.debug(f"Checking if media exists in S3: {s3_key}")
+        s3.head_object(Bucket=S3_BUCKET, Key=s3_key)
+        logger.info(f"Media already exists in S3: {s3_key}")
+        return True, s3_key
+    except s3.exceptions.ClientError as e:
+        code = e.response["ResponseMetadata"]["HTTPStatusCode"]
+        logger.debug(f"S3 head_object response code: {code}")
+        if code == 404:
+            logger.debug(f"Media not found in S3, downloading and uploading: {s3_key}")
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                logger.debug(f"Downloading media to temporary file: {tmp.name}")
+                await client.download_media(reply.media, file=tmp.name)
+                tmp.flush()
+                tmp.seek(0)
+                
+                s3.upload_file(tmp.name, S3_BUCKET, s3_key)
+                logger.info(f"Uploaded media to S3: {s3_key}")
+            os.unlink(tmp.name)
+            logger.debug(f"Temporary file deleted: {tmp.name}")
+            return True, s3_key
+        else:
+            logger.error(f"S3 head_object error: {e}")
+            return False, None
+    except Exception as e:
+        logger.error(f"Failed to process media: {e}")
+        return False, None
+
+def create_task(event, task_type, **additional_data):
+    """Create a task object from an event"""
+    if task_type == 1:  # New message
+        sender = extract_chat_id(event)
+        message = event.raw_text
+        timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
+        sender_obj = additional_data.get('sender_obj')
         
+        task = {
+            "type": task_type,
+            "is_private": event.is_private,
+            "payload": {
+                "chat_id": sender,
+                "message": message,
+                "timestamp": timestamp,
+                "my_message": event.message.out,
+                "msg_id": event.message.id,
+                "sender": serialize_sender(sender_obj) if sender_obj else None,
+            }
+        }
         
+        # Add media reference if available
+        if additional_data.get('media_uploaded') and additional_data.get('s3_key'):
+            task["payload"]["reply_to_media_id"] = additional_data.get('s3_key')
+        else:
+            task["payload"]["reply_to_media_id"] = False
+            
+        return task
+    
+    elif task_type == 2:  # Edited message
+        return {
+            "type": task_type,
+            "is_private": event.is_private,
+            "payload": {
+                "chat_id": extract_chat_id(event),
+                "message": event.message.text,
+                "sender": event.sender_id,
+                "msg_id": event.message.id,
+            }
+        }
+    
+    elif task_type == 3:  # Deleted message
+        return {
+            "type": task_type,
+            "payload": {
+                "msg_id": additional_data.get('msg_id'),
+            }
+        }
+    
+    return None
+
 @client.on(events.NewMessage())
 async def handler(event: events.NewMessage.Event):
     await process_message(event=event, client=client)
     
-    sender = extract_chat_id(event)
-    message = event.raw_text
-    timestamp = event.message.date.strftime('%Y-%m-%d %H:%M:%S')
-    
     sender_obj = await event.get_sender()
     
-    # Download and add to s3 media block
+    # Process media if this is a reply
     media_uploaded = False
+    s3_key = None
+    
     if event.message.reply_to_msg_id:
         logger.debug(f"Message is a reply, ID: {event.message.reply_to_msg_id}")
         try:
             reply = await event.get_reply_message()
             logger.debug(f"Got reply message: ID={reply.id}, media={bool(reply.media)}")
-
-            doc = reply.media.document if reply.media and hasattr(reply.media, 'document') else None
-            if doc:
-                logger.debug("Reply contains a document")
-                attrs = doc.attributes
-                is_voice = any(isinstance(a, DocumentAttributeAudio) and getattr(a, "voice", False) for a in attrs)
-                is_round = any(isinstance(a, DocumentAttributeVideo) and getattr(a, "round_message", False) for a in attrs)
-
-                logger.debug(f"is_voice={is_voice}, is_round={is_round}")
-
-                if is_voice or is_round:
-                    media_type = "voice" if is_voice else "round"
-                    msg_id = reply.id
-                    extension = ".ogg" if is_voice else ".mp4"
-                    s3_key = f"{media_type}_{msg_id}{extension}"
-
-                    logger.debug(f"Generated S3 key: {s3_key}")
-
-                    try:
-                        logger.debug(f"Checking if media exists in S3: {s3_key}")
-                        s3.head_object(Bucket=S3_BUCKET, Key=s3_key)
-                        logger.info(f"Media already exists in S3: {s3_key}")
-                        media_uploaded = True
-                    except s3.exceptions.ClientError as e:
-                        code = e.response["ResponseMetadata"]["HTTPStatusCode"]
-                        logger.debug(f"S3 head_object response code: {code}")
-                        if code == 404:
-                            logger.debug(f"Media not found in S3, downloading and uploading: {s3_key}")
-                            with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                                logger.debug(f"Downloading media to temporary file: {tmp.name}")
-                                await client.download_media(reply.media, file=tmp.name)
-                                tmp.flush()
-                                tmp.seek(0)
-
-                                s3.upload_file(tmp.name, S3_BUCKET, s3_key)
-                                logger.info(f"Uploaded media to S3: {s3_key}")
-                                media_uploaded = True
-                            os.unlink(tmp.name)
-                            logger.debug(f"Temporary file deleted: {tmp.name}")
-                        else:
-                            logger.error(f"S3 head_object error: {e}")
-            else:
-                logger.debug("Reply does not contain a document")
+            media_uploaded, s3_key = await process_media(reply)
         except Exception as e:
             logger.error(f"Failed to process reply media: {e}")
-
-
-    async with clients_lock:
-        for q in tasks.values():
-            task = {
-                "type": 1,
-                "is_private": event.is_private,
-                "payload": {
-                    "chat_id": sender,
-                    "message": message,
-                    "timestamp": timestamp,
-                    "my_message": event.message.out,
-                    "msg_id": event.message.id,
-                    "sender": serialize_sender(sender_obj),
-                    "reply_to_media_id": s3_key if media_uploaded else False
-                }
-            }
-            await q.put(task)
-
+    
+    task = create_task(event, 1, sender_obj=sender_obj, media_uploaded=media_uploaded, s3_key=s3_key)
+    await distribute_task_to_clients(task)
 
 @client.on(events.MessageEdited)
 async def message_edited(event: events.MessageEdited.Event):
-    async with clients_lock:
-        for q in tasks.values():
-            task = {
-                "type": 2,
-                "is_private": event.is_private,
-                "payload": {
-                    "chat_id": extract_chat_id(event),
-                    "message": event.message.text,
-                    "sender": event.sender_id,
-                    "msg_id": event.message.id,
-                }
-            }
-            await q.put(task)
-
+    task = create_task(event, 2)
+    await distribute_task_to_clients(task)
 
 @client.on(events.MessageDeleted)
 async def message_deleted(event: events.MessageDeleted.Event):
-    async with clients_lock:
-        for msg_id in event.deleted_ids:
-            for q in tasks.values():
-                task = {
-                    "type": 3,
-                    "payload": {
-                        "msg_id": msg_id,
-                    }
-                }
-                await q.put(task)
-
+    for msg_id in event.deleted_ids:
+        task = create_task(None, 3, msg_id=msg_id)
+        await distribute_task_to_clients(task)
 
 async def main():
     logger.info("Starting...")
