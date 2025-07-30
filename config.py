@@ -17,6 +17,7 @@ S3_ENDPOINT = getenv("S3_ENDPOINT", "http://127.0.0.1:9000")
 S3_USERNAME = getenv("S3_USERNAME")
 S3_PASSWORD = getenv("S3_PASSWORD")
 S3_BUCKET = getenv("S3_BUCKET")
+SAVE_MEDIA = getenv("SAVE_MEDIA", "true").lower() in ("true", "1", "yes")
 
 # Db config
 TORTOISE_ORM = {

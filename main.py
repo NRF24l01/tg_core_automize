@@ -1,6 +1,6 @@
 import asyncio
 from telethon import TelegramClient, events
-from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH, S3_ENDPOINT, S3_PASSWORD, S3_USERNAME, S3_BUCKET
+from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH, S3_ENDPOINT, S3_PASSWORD, S3_USERNAME, S3_BUCKET, SAVE_MEDIA
 from datetime import datetime, timezone, timedelta
 from modules import Logger, AsyncSocketController, serialize_sender, extract_chat_id
 from command_processer import process_message
@@ -19,14 +19,16 @@ tasks: dict[str, asyncio.Queue] = {}
 clients = set()
 clients_lock = asyncio.Lock()
 
-s3 = boto3client(
-    's3',
-    endpoint_url=S3_ENDPOINT,
-    aws_access_key_id=S3_USERNAME,
-    aws_secret_access_key=S3_PASSWORD,
-    config=Config(signature_version='s3v4'),
-    region_name='us-east-1',
-)
+s3 = None
+if SAVE_MEDIA:
+    s3 = boto3client(
+        's3',
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=S3_USERNAME,
+        aws_secret_access_key=S3_PASSWORD,
+        config=Config(signature_version='s3v4'),
+        region_name='us-east-1',
+    )
 
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 logger = Logger()
@@ -39,6 +41,9 @@ async def init():
     await Tortoise.generate_schemas()
 
 async def cleanup_old_s3_files():
+    if not SAVE_MEDIA:
+        return
+        
     while True:
         logger.info("Запущена задача очистки S3...")
         try:
@@ -283,7 +288,8 @@ async def handler(event: events.NewMessage.Event):
     
     # Download and add to s3 media block
     media_uploaded = False
-    if event.message.reply_to_msg_id:
+    s3_key = False
+    if SAVE_MEDIA and event.message.reply_to_msg_id:
         logger.debug(f"Message is a reply, ID: {event.message.reply_to_msg_id}")
         try:
             reply = await event.get_reply_message()
@@ -393,12 +399,16 @@ async def main():
     await client.start()
     logger.info("Telegram client started.")
 
-    await asyncio.gather(
+    tasks_to_gather = [
         start_server(),
         client.run_until_disconnected(),
         process_tasks(),
-        cleanup_old_s3_files(),
-    )
+    ]
+    
+    if SAVE_MEDIA:
+        tasks_to_gather.append(cleanup_old_s3_files())
+    
+    await asyncio.gather(*tasks_to_gather)
 
 if __name__ == "__main__":
     asyncio.run(main())
