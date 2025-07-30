@@ -387,7 +387,7 @@ async def message_deleted(event: events.MessageDeleted.Event):
 async def main():
     logger.info("Starting...")
 
-    await run_migrations()
+    await run_migrations(logger)
     await init()
     
     await client.start()

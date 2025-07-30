@@ -3,8 +3,9 @@ from aerich import Command
 from config import TORTOISE_ORM
 from tortoise import Tortoise
 import os
+from modules import Logger
 
-async def run_migrations():
+async def run_migrations(logger: Logger):
     command = Command(tortoise_config=TORTOISE_ORM, app="models", location="./migrations")
     await command.init()
 
@@ -13,9 +14,9 @@ async def run_migrations():
         try:
             await command.init_db(safe=False)
         except FileExistsError:
-            print("Миграция уже существует. Пропускаем init_db.")
+            logger.info("Миграция уже существует. Пропускаем init_db.")
     else:
-        print("Миграции уже инициализированы. Пропускаем init_db.")
+        logger.info("Миграции уже инициализированы. Пропускаем init_db.")
         
     await command.migrate()
     await command.upgrade()
