@@ -192,7 +192,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             client_disconnected = True
                             break
                     else:
-                        logger.debug(f"{client_name} this isnot for me")
+                        logger.debug(f"{client_name} this is not for me")
                         continue
                 
                 try:
@@ -204,12 +204,14 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 task["system_config"] = db_module.system_config
                 skip = False
                 if db_module.system_config.get("skip_private", False) is True and task.get("is_private", False):
-                    skip = True 
+                    skip = True # Пропускаем обработку задач для чатов 1на1, используется в логгере
                 
                 try:
                     chat = await Chat.filter(chat_id=int(task["payload"]["chat_id"])).first()
-                except KeyError as e:
+                except KeyError as e: 
+                    # Если у полученной для отправки таски мы не знаем из какого она чата, те это сообщение про удаление
                     if task["type"] in client_required_events:
+                        # Тут обрабатывается только удаление
                         logger.debug(f"Sending {task} to {client_name}")
                         task["config"] = {}
                         try:
@@ -223,9 +225,14 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             logger.info(f"Error sending to client {client_name}: {e}")
                             client_disconnected = True
                             break
-                if chat and not skip:
+                    else:
+                        logger.warn(f"Task {task} has no chat_id, skipping")
+                        continue
+                if not skip and chat:
+                    # Если нормальная задачка и чат нашли
                     chatmodule = await ChatModule.filter(chat=chat, module=db_module).first()
                     if chatmodule:
+                        # Если модуль привязан к чату
                         if task["type"] in client_required_events:
                             task["config"] = chatmodule.config_json
                             logger.debug(f"Sending {task} to {client_name}")
@@ -240,6 +247,7 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                                 client_disconnected = True
                                 break
                 elif skip:
+                    # Если чат приватный и у задачки стоит скип
                     task["config"] = {}
                     if task["type"] in client_required_events:
                         logger.debug(f"Sending {task} to {client_name}")
