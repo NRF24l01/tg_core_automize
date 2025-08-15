@@ -1,7 +1,7 @@
 from telethon import TelegramClient, events
 from models import Chat, Module, ChatModule
 from json import loads, decoder, dumps
-from modules import extract_chat_id
+from . import extract_chat_id
 
 
 def set_nested(d: dict, keys: list[str], value):

@@ -3,7 +3,7 @@ from telethon import TelegramClient, events
 from config import HOST, PORT, SESSION_NAME, API_ID, API_HASH, S3_ENDPOINT, S3_PASSWORD, S3_USERNAME, S3_BUCKET, SAVE_MEDIA
 from datetime import datetime, timezone, timedelta
 from modules import Logger, AsyncSocketController, serialize_sender, extract_chat_id
-from command_processer import process_message
+from modules.command_processer import process_message
 from tortoise import Tortoise, run_async
 from migrate import run_migrations
 from models import Module, Chat, ChatModule
