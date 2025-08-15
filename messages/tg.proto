@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package tg;
+
+enum MessageType {
+  UNKNOWN = 0;
+  NEW_MESSAGE = 1;    // type = 1
+  EDIT_MESSAGE = 2;   // type = 2
+  DELETE_MESSAGE = 3; // type = 3
+  ACK = 4;            // type = 0 (подтверждение отправки)
+  SEND_REQUEST = 5;   // клиент просит отправить сообщение
+}
+
+message TgMessage {
+  MessageType type = 1;           // соответствует твоему task["type"]
+  bool is_private = 2;            // соответствует task["is_private"]
+
+  map<string, string> config = 3; // соответствует task["config"]
+  map<string, string> payload = 4; // соответствует task["payload"]
+
+  bool direct = 5;                 // task["direct"] (если есть)
+  string target = 6;               // task["target"] (если есть)
+  string module_name = 7;          // task["module_name"] (если есть)
+}
+
+service TgService {
+  rpc Exchange(stream TgMessage) returns (stream TgMessage);
+}

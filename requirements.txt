@@ -4,3 +4,5 @@ tortoise-orm~=0.25.1
 aiosqlite~=0.21.0
 aerich~=0.9.1
 boto3~=1.39.3
+grpcio~=1.74.0
+grpcio-tools~=1.74.0
