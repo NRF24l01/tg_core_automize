@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package tg;
+package messages;
 
 enum MessageType {
   UNKNOWN = 0;
@@ -11,18 +11,21 @@ enum MessageType {
   SEND_REQUEST = 5;   // клиент просит отправить сообщение
 }
 
-message TgMessage {
+message NewEvent {
   MessageType type = 1;           // соответствует твоему task["type"]
   bool is_private = 2;            // соответствует task["is_private"]
 
   map<string, string> config = 3; // соответствует task["config"]
   map<string, string> payload = 4; // соответствует task["payload"]
+  map<string, string> system_config = 5; // соответствует task["system_config"]
+}
 
-  bool direct = 5;                 // task["direct"] (если есть)
-  string target = 6;               // task["target"] (если есть)
-  string module_name = 7;          // task["module_name"] (если есть)
+message ActionRequired {
+  MessageType type = 1;           // соответствует твоему task["type"]
+  bool require_answer = 2;            // соответствует task["is_private"]
+  map<string, string> payload = 3; // соответствует task["payload"]
 }
 
 service TgService {
-  rpc Exchange(stream TgMessage) returns (stream TgMessage);
+  rpc Exchange(stream NewEvent) returns (stream ActionRequired);
 }
